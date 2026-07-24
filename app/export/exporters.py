@@ -8,6 +8,7 @@ import json
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from app.schemas.quiz import Question
 
@@ -28,14 +29,21 @@ def export_json(questions: list[Question]) -> bytes:
 
 
 def export_xlsx(questions: list[Question]) -> bytes:
-    """Styled Excel workbook with one row per question."""
+    """Styled Excel workbook with one row per question.
+
+    Option columns are sized to the widest question — a 3-option and a
+    6-option question in the same set both export in full, not just A-D.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Quiz"
 
-    # Header row
-    headers = ["#", "Question", "Option A", "Option B", "Option C", "Option D",
-               "Correct", "Explanation"]
+    max_opts = max((len(q.options) for q in questions), default=2)
+    option_headers = [f"Option {chr(65 + i)}" for i in range(max_opts)]
+    headers = ["#", "Question", *option_headers, "Correct", "Explanation"]
+    correct_col = 3 + max_opts
+    explanation_col = correct_col + 1
+
     header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=11)
 
@@ -49,17 +57,17 @@ def export_xlsx(questions: list[Question]) -> bytes:
     for i, q in enumerate(questions, 2):
         ws.cell(row=i, column=1, value=i - 1)
         ws.cell(row=i, column=2, value=q.question)
-        for j, opt in enumerate(q.options[:4]):
+        for j, opt in enumerate(q.options):
             ws.cell(row=i, column=3 + j, value=opt)
         if q.correct_option_index is not None and q.correct_option_index < len(q.options):
-            letter = chr(65 + q.correct_option_index)  # A, B, C, D
-            ws.cell(row=i, column=7, value=letter)
-        ws.cell(row=i, column=8, value=q.explanation or "")
+            letter = chr(65 + q.correct_option_index)  # A, B, C, ...
+            ws.cell(row=i, column=correct_col, value=letter)
+        ws.cell(row=i, column=explanation_col, value=q.explanation or "")
 
     # Column widths
     ws.column_dimensions["B"].width = 50
-    for col_letter in "CDEF":
-        ws.column_dimensions[col_letter].width = 30
+    for col in range(3, 3 + max_opts):
+        ws.column_dimensions[get_column_letter(col)].width = 30
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -67,18 +75,23 @@ def export_xlsx(questions: list[Question]) -> bytes:
 
 
 def export_csv(questions: list[Question]) -> bytes:
-    """UTF-8 CSV with BOM for Excel compatibility."""
+    """UTF-8 CSV with BOM for Excel compatibility.
+
+    Option columns are sized to the widest question, same as export_xlsx.
+    """
     buf = io.StringIO()
     buf.write("\ufeff")  # BOM
     writer = csv.writer(buf)
-    writer.writerow(["#", "Question", "Option A", "Option B", "Option C",
-                      "Option D", "Correct", "Explanation"])
+
+    max_opts = max((len(q.options) for q in questions), default=2)
+    option_headers = [f"Option {chr(65 + i)}" for i in range(max_opts)]
+    writer.writerow(["#", "Question", *option_headers, "Correct", "Explanation"])
 
     for i, q in enumerate(questions, 1):
-        opts = q.options + [""] * (4 - len(q.options))  # pad to 4
+        opts = q.options + [""] * (max_opts - len(q.options))  # pad to max_opts
         correct = ""
         if q.correct_option_index is not None and q.correct_option_index < len(q.options):
             correct = chr(65 + q.correct_option_index)
-        writer.writerow([i, q.question, *opts[:4], correct, q.explanation or ""])
+        writer.writerow([i, q.question, *opts, correct, q.explanation or ""])
 
     return buf.getvalue().encode("utf-8")

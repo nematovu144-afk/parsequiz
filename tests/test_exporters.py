@@ -35,7 +35,7 @@ def test_export_csv_has_header_and_correct_letter():
     assert rows[0][:2] == ["#", "Question"]
     assert rows[1][1] == "Capital of France?"
     assert rows[1][2:5] == ["London", "Paris", "Berlin"]
-    assert rows[1][6] == "B"  # correct_option_index=1 -> letter B
+    assert rows[1][5] == "B"  # correct_option_index=1 -> letter B (3 options -> Correct at col 5)
 
 
 def test_export_xlsx_has_correct_letter_and_headers():
@@ -43,10 +43,41 @@ def test_export_xlsx_has_correct_letter_and_headers():
     ws = wb.active
     assert ws.cell(row=1, column=2).value == "Question"
     assert ws.cell(row=2, column=2).value == "Capital of France?"
-    assert ws.cell(row=2, column=7).value == "B"
+    assert ws.cell(row=2, column=6).value == "B"  # 3 options -> Correct at col 6
 
 
 def test_export_empty_list_does_not_crash():
     assert json.loads(export_json([])) == []
     export_csv([])
     export_xlsx([])
+
+
+# ── Mixed option counts (some questions 3 options, some 6) ──────
+
+
+MIXED_QUESTIONS = [
+    Question(question="2+2?", options=["3", "4"], correct_option_index=1),
+    Question(
+        question="Pick a color",
+        options=["Red", "Green", "Blue", "Yellow", "Purple", "Orange"],
+        correct_option_index=5,
+    ),
+]
+
+
+def test_export_csv_sizes_columns_to_widest_question():
+    text = export_csv(MIXED_QUESTIONS).decode("utf-8-sig")
+    rows = list(csv.reader(io.StringIO(text)))
+    assert rows[0] == ["#", "Question", "Option A", "Option B", "Option C",
+                        "Option D", "Option E", "Option F", "Correct", "Explanation"]
+    # 6-option question keeps all six options, nothing truncated
+    assert rows[2][2:8] == ["Red", "Green", "Blue", "Yellow", "Purple", "Orange"]
+    assert rows[2][8] == "F"  # correct_option_index=5 -> letter F
+
+
+def test_export_xlsx_sizes_columns_to_widest_question():
+    wb = load_workbook(io.BytesIO(export_xlsx(MIXED_QUESTIONS)))
+    ws = wb.active
+    assert ws.cell(row=1, column=8).value == "Option F"
+    assert ws.cell(row=3, column=8).value == "Orange"  # 6th option not dropped
+    assert ws.cell(row=3, column=9).value == "F"  # Correct column shifted past 6 options
