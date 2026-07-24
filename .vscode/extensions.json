@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    "ritwickdey.liveserver",
+    "humao.rest-client",
+    "tamasfe.even-better-toml"
+  ]
+}

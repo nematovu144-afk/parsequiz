@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quiz Parser</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
+  <style>
+    :root { --accent: #2E7D32; --accent-light: #4CAF50; --danger: #D32F2F; --warn: #F57C00; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f8faf8; }
+    .drop-zone { border: 2px dashed #94a3b8; transition: all .2s; }
+    .drop-zone.active { border-color: var(--accent); background: #e8f5e9; }
+    .flag-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #fff3e0; color: var(--warn); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-light); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .correct-ring { box-shadow: inset 0 0 0 2px var(--accent); }
+    input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const API = window.location.origin.includes('localhost')
+  ? 'http://localhost:8000/api'
+  : '/api';
+
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── App ────────────────────────────────────────────────────
+
+function App() {
+  const [stage, setStage]         = useState('upload');   // upload | polling | editor
+  const [jobId, setJobId]         = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [error, setError]         = useState('');
+  const [filename, setFilename]   = useState('');
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <header className="mb-8 text-center">
+        <h1 className="text-3xl font-bold" style={{color:'var(--accent)'}}>Quiz Parser</h1>
+        <p className="text-gray-500 mt-1">Upload a test document → get structured quiz data</p>
+      </header>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          {error}
+          <button className="ml-4 underline" onClick={() => setError('')}>dismiss</button>
+        </div>
+      )}
+
+      {stage === 'upload' && (
+        <UploadZone
+          onJobStarted={(id, name) => { setJobId(id); setFilename(name); setStage('polling'); }}
+          onError={setError}
+        />
+      )}
+
+      {stage === 'polling' && (
+        <Poller
+          jobId={jobId}
+          onDone={(qs) => { setQuestions(qs); setStage('editor'); }}
+          onError={(e) => { setError(e); setStage('upload'); }}
+        />
+      )}
+
+      {stage === 'editor' && (
+        <Editor
+          questions={questions}
+          setQuestions={setQuestions}
+          filename={filename}
+          onReset={() => { setStage('upload'); setQuestions([]); setJobId(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Upload Drop Zone ───────────────────────────────────────
+
+function UploadZone({ onJobStarted, onError }) {
+  const [dragging, setDragging] = useState(false);
+  const [mode, setMode]         = useState('auto');
+  const inputRef = useRef();
+
+  const handleFile = useCallback(async (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('delimiter_mode', mode);
+    try {
+      const res = await fetch(`${API}/upload`, { method: 'POST', body: form });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
+      const data = await res.json();
+      onJobStarted(data.job_id, file.name);
+    } catch (e) { onError(e.message); }
+  }, [mode, onJobStarted, onError]);
+
+  const onDrop = (e) => {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  return (
+    <div>
+      <div
+        className={`drop-zone rounded-xl p-12 text-center cursor-pointer ${dragging ? 'active' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current.click()}
+      >
+        <svg className="mx-auto mb-4 text-gray-400" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
+        </svg>
+        <p className="text-gray-600 font-medium">Drop a .docx, .pdf, or .txt file here</p>
+        <p className="text-gray-400 text-sm mt-1">or click to browse</p>
+        <input ref={inputRef} type="file" accept=".docx,.pdf,.txt" className="hidden"
+          onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-3 text-sm text-gray-500">
+        <label>Correct-answer detection:</label>
+        <select value={mode} onChange={(e) => setMode(e.target.value)}
+          className="border rounded px-2 py-1">
+          <option value="auto">Auto-detect</option>
+          <option value="bold">Bold text</option>
+          <option value="underline">Underlined text</option>
+          <option value="plus">+ prefix</option>
+          <option value="star">* prefix</option>
+          <option value="hash"># prefix</option>
+          <option value="checkbox">[x] checkbox</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ─── Poller ─────────────────────────────────────────────────
+
+function Poller({ jobId, onDone, onError }) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API}/parse/${jobId}`);
+        const data = await res.json();
+        if (!active) return;
+        setProgress(Math.round((data.progress || 0) * 100));
+        if (data.status === 'done')   return onDone(data.questions);
+        if (data.status === 'failed') return onError(data.error || 'Parse failed');
+        setTimeout(poll, 800);
+      } catch (e) { if (active) onError(e.message); }
+    };
+    poll();
+    return () => { active = false; };
+  }, [jobId]);
+
+  return (
+    <div className="text-center py-16">
+      <div className="inline-block w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4" />
+      <p className="text-gray-600">Parsing document… {progress}%</p>
+    </div>
+  );
+}
+
+// ─── Editor ─────────────────────────────────────────────────
+
+function Editor({ questions, setQuestions, filename, onReset }) {
+  const flagged  = questions.filter(q => q.flags && q.flags.length > 0).length;
+  const total    = questions.length;
+
+  const updateQ = (idx, patch) => {
+    setQuestions(qs => qs.map((q, i) => i === idx ? { ...q, ...patch } : q));
+  };
+
+  const deleteQ = (idx) => {
+    setQuestions(qs => qs.filter((_, i) => i !== idx));
+  };
+
+  const exportAs = async (fmt) => {
+    const res = await fetch(`${API}/export`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questions, format: fmt }),
+    });
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `quiz.${fmt === 'xlsx' ? 'xlsx' : fmt}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <span className="font-semibold text-lg">{total} questions</span>
+          {flagged > 0 && (
+            <span className="ml-3 flag-badge">{flagged} need review</span>
+          )}
+          <span className="ml-3 text-gray-400 text-sm">{filename}</span>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => exportAs('json')} className="btn-primary px-3 py-1.5 rounded text-sm">JSON</button>
+          <button onClick={() => exportAs('xlsx')} className="btn-primary px-3 py-1.5 rounded text-sm">Excel</button>
+          <button onClick={() => exportAs('csv')}  className="btn-primary px-3 py-1.5 rounded text-sm">CSV</button>
+          <button onClick={onReset} className="border px-3 py-1.5 rounded text-sm text-gray-600 hover:bg-gray-100">New File</button>
+        </div>
+      </div>
+
+      {/* Question cards */}
+      <div className="space-y-4">
+        {questions.map((q, qi) => (
+          <QuestionCard key={q.id} q={q} idx={qi} updateQ={updateQ} deleteQ={deleteQ} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Single Question Card ───────────────────────────────────
+
+function QuestionCard({ q, idx, updateQ, deleteQ }) {
+  const hasFlagOfType = (type) => q.flags && q.flags.includes(type);
+  const borderColor = q.flags && q.flags.length > 0 ? 'border-orange-300' : 'border-gray-200';
+
+  return (
+    <div className={`bg-white rounded-lg border ${borderColor} p-4 shadow-sm`}>
+      <div className="flex items-start gap-3">
+        <span className="text-gray-400 font-mono text-sm mt-1 select-none">{idx + 1}.</span>
+        <div className="flex-1">
+          {/* Question text */}
+          <textarea
+            className="w-full border-0 text-gray-800 font-medium resize-none bg-transparent"
+            rows={2}
+            value={q.question}
+            onChange={(e) => updateQ(idx, { question: e.target.value })}
+          />
+
+          {/* Flags */}
+          {q.flags && q.flags.length > 0 && (
+            <div className="flex gap-1 mb-2">
+              {q.flags.map(f => <span key={f} className="flag-badge">{f.replace(/_/g, ' ')}</span>)}
+            </div>
+          )}
+
+          {/* Options */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+            {q.options.map((opt, oi) => (
+              <div key={oi}
+                className={`flex items-center gap-2 rounded px-3 py-2 text-sm cursor-pointer border
+                  ${q.correct_option_index === oi ? 'correct-ring bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}
+                onClick={() => updateQ(idx, { correct_option_index: oi })}
+              >
+                <span className="font-mono text-xs text-gray-400 select-none">{String.fromCharCode(65 + oi)}</span>
+                <input
+                  className="flex-1 bg-transparent border-0 text-gray-700"
+                  value={opt}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const newOpts = [...q.options];
+                    newOpts[oi] = e.target.value;
+                    updateQ(idx, { options: newOpts });
+                  }}
+                />
+                {q.correct_option_index === oi && (
+                  <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                  </svg>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add option button */}
+          {q.options.length < 6 && (
+            <button
+              className="text-xs text-green-600 mt-2 hover:underline"
+              onClick={() => updateQ(idx, { options: [...q.options, ''] })}
+            >+ add option</button>
+          )}
+
+          {/* Explanation */}
+          {q.explanation && (
+            <div className="mt-2 text-xs text-gray-500 italic">
+              <span className="font-semibold">Explanation:</span>{' '}
+              <input
+                className="bg-transparent border-0 text-gray-500 w-full"
+                value={q.explanation}
+                onChange={(e) => updateQ(idx, { explanation: e.target.value })}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Delete button */}
+        <button onClick={() => deleteQ(idx)}
+          className="text-gray-300 hover:text-red-500 transition-colors mt-1" title="Delete">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById('root'));
+</script>
+</body>
+</html>

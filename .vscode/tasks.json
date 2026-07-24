@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: uvicorn ishga tushirish",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["-m", "uvicorn", "app.main:app", "--reload", "--port", "8000"],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "servers"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: statik server (port 5500)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["-m", "http.server", "5500", "--directory", "frontend"],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "servers"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Testlarni ishga tushirish",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["-m", "pytest", "tests/", "-v"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Hammasini ishga tushirish (backend + frontend)",
+      "dependsOn": [
+        "Backend: uvicorn ishga tushirish",
+        "Frontend: statik server (port 5500)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
