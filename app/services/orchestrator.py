@@ -21,7 +21,7 @@ from app.parsers.delimiter import RawQuestion, split_into_questions
 from app.parsers.docx_parser import DocxParser
 from app.parsers.pdf_parser import PdfParser
 from app.parsers.txt_parser import TxtParser
-from app.schemas.quiz import Question, ValidationFlag
+from app.schemas.quiz import Question
 from app.services.validator import validate_questions
 
 logger = logging.getLogger(__name__)

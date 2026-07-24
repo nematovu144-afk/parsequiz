@@ -1,0 +1,10 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "SIM", "B", "BLE", "RUF"]
+ignore = [
+    "B008",   # FastAPI's File(...)/Form(...)/Depends(...) defaults are the framework's own idiom, not a bug
+    "BLE001", # llm/fallback.py deliberately swallows any malformed per-item error so one bad
+              # LLM-returned question doesn't drop the rest of a valid parse
+]

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
-
 
 # ── Question schema ──────────────────────────────────────────
 
@@ -29,8 +27,8 @@ class Question(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     question: str = ""
     options: list[str] = Field(default_factory=list)
-    correct_option_index: Optional[int] = None
-    explanation: Optional[str] = None
+    correct_option_index: int | None = None
+    explanation: str | None = None
     flags: list[ValidationFlag] = Field(default_factory=list)
 
 
@@ -50,9 +48,9 @@ class ParseJob(BaseModel):
     job_id: UUID = Field(default_factory=uuid4)
     filename: str = ""
     status: JobStatus = JobStatus.PENDING
-    progress: float = 0.0  # 0–1
+    progress: float = 0.0  # 0-1
     questions: list[Question] = Field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
     delimiter_mode: str = "auto"  # "auto" | "bold" | "plus" | …
 
 

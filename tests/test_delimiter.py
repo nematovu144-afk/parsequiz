@@ -1,7 +1,5 @@
 """Unit tests for the delimiter detection engine."""
 
-import pytest
-
 from app.parsers.base import RichParagraph, RichRun
 from app.parsers.delimiter import split_into_questions
 

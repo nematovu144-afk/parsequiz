@@ -7,7 +7,6 @@ bold/italic styling even from PDFs.
 from __future__ import annotations
 
 import asyncio
-import re
 from pathlib import Path
 
 import pdfplumber

@@ -24,10 +24,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from app.parsers.base import RichParagraph
-
 
 # ── Regex inventory ──────────────────────────────────────────
 
@@ -59,7 +57,7 @@ class RawQuestion:
     """An intermediate representation before final normalisation."""
     question_text: str = ""
     options: list[ParsedOption] = field(default_factory=list)
-    explanation: Optional[str] = None
+    explanation: str | None = None
 
 
 # ── Public API ───────────────────────────────────────────────
@@ -139,9 +137,7 @@ def _is_question_line(text: str, para: RichParagraph) -> bool:
     if RE_QUESTION_NUM.match(text):
         return True
     # Lines ending with '?' that are NOT short option-like strings
-    if text.rstrip().endswith("?") and len(text) > 15:
-        return True
-    return False
+    return text.rstrip().endswith("?") and len(text) > 15
 
 
 def _try_parse_option(
@@ -182,11 +178,11 @@ def _try_parse_option(
         return None
 
     # Step 3: Style-based correct detection (when no symbol was found)
-    if not is_correct:
-        if mode in ("auto", "bold") and para.has_any_bold():
-            is_correct = True
-        elif mode in ("auto", "underline") and para.has_any_underline():
-            is_correct = True
+    if not is_correct and (
+        (mode in ("auto", "bold") and para.has_any_bold())
+        or (mode in ("auto", "underline") and para.has_any_underline())
+    ):
+        is_correct = True
 
     return ParsedOption(text=clean, is_correct=is_correct)
 

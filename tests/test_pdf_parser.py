@@ -33,7 +33,7 @@ def test_bold_line_detected_via_font_heuristic():
 
     lines = PdfParser._page_to_rich_lines(page)
 
-    assert [l.plain_text for l in lines] == ["A) Red", "B) Blue", "C) Green"]
+    assert [ln.plain_text for ln in lines] == ["A) Red", "B) Blue", "C) Green"]
     assert lines[1].has_any_bold() is True
     assert lines[0].has_any_bold() is False
     assert lines[2].has_any_bold() is False

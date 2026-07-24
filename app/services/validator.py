@@ -19,9 +19,12 @@ def validate_questions(questions: list[Question]) -> list[Question]:
             q.flags.append(ValidationFlag.TOO_FEW_OPTIONS)
 
         # 3. No correct answer selected
-        if q.correct_option_index is None:
-            q.flags.append(ValidationFlag.MISSING_CORRECT)
-        elif q.correct_option_index < 0 or q.correct_option_index >= len(q.options):
+        no_correct = (
+            q.correct_option_index is None
+            or q.correct_option_index < 0
+            or q.correct_option_index >= len(q.options)
+        )
+        if no_correct:
             q.flags.append(ValidationFlag.MISSING_CORRECT)
 
         # 4. Duplicate option texts (case-insensitive)
@@ -45,6 +48,4 @@ def _looks_like_artifact(text: str) -> bool:
         return True
     if stripped in ("+", "*", "#", "[x]", "[X]", "-"):
         return True
-    if len(stripped) <= 1 and not stripped.isalnum():
-        return True
-    return False
+    return len(stripped) <= 1 and not stripped.isalnum()
