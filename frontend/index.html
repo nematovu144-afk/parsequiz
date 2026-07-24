@@ -1,24 +1,76 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quiz Parser</title>
+  <title>ParseQuiz</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --accent: #2E7D32; --accent-light: #4CAF50; --danger: #D32F2F; --warn: #F57C00; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #f8faf8; }
-    .drop-zone { border: 2px dashed #94a3b8; transition: all .2s; }
-    .drop-zone.active { border-color: var(--accent); background: #e8f5e9; }
-    .flag-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #fff3e0; color: var(--warn); }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-light); }
-    .btn-danger { background: var(--danger); color: #fff; }
+    :root {
+      --accent: #16a34a;
+      --accent-2: #22c55e;
+      --accent-dark: #15803d;
+      --danger: #dc2626;
+      --warn: #d97706;
+      --paper: #f7faf8;
+    }
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body {
+      background:
+        radial-gradient(circle at 12% 0%, #eafbf1 0%, transparent 45%),
+        radial-gradient(circle at 100% 15%, #eef6ff 0%, transparent 40%),
+        var(--paper);
+      min-height: 100vh;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .logo-badge {
+      width: 44px; height: 44px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent-2));
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 1.15rem;
+      box-shadow: 0 8px 20px -6px rgba(22,163,74,.5);
+      flex-shrink: 0;
+    }
+    .card {
+      background: #fff; border-radius: 1rem;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+      transition: box-shadow .2s ease, transform .2s ease;
+    }
+    .card:hover { box-shadow: 0 10px 26px -10px rgba(15,23,42,.14); }
+    .drop-zone { border: 2px dashed #cbd5e1; transition: all .25s ease; background: #fff; }
+    .drop-zone.active, .drop-zone:hover { border-color: var(--accent); background: #f0fdf4; }
+    .flag-badge {
+      font-size: .7rem; padding: 3px 9px; border-radius: 999px;
+      background: #fff7ed; color: var(--warn); border: 1px solid #fed7aa; font-weight: 600;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent-2)); color: #fff;
+      box-shadow: 0 6px 16px -6px rgba(22,163,74,.5);
+      transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+    }
+    .btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(22,163,74,.55); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-ghost { background: #fff; border: 1px solid #e2e8f0; color: #475569; transition: .15s ease; }
+    .btn-ghost:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .btn-soft { background: #f0fdf4; color: var(--accent-dark); border: 1px solid #bbf7d0; transition: .15s ease; font-weight: 600; }
+    .btn-soft:hover { background: #dcfce7; }
     .correct-ring { box-shadow: inset 0 0 0 2px var(--accent); }
-    input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .fade-in { animation: fadeInUp .35s ease both; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .progress-track { background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+    .progress-fill { background: linear-gradient(90deg, var(--accent-dark), var(--accent-2)); transition: width .3s ease; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
   </style>
 </head>
 <body>
@@ -29,59 +81,334 @@ const API = window.location.origin.includes('localhost')
   ? 'http://localhost:8000/api'
   : '/api';
 
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useContext, createContext } = React;
+
+// ─── i18n ───────────────────────────────────────────────────
+
+const LANGS = ['uz', 'ru', 'en'];
+const LANG_NAMES = { uz: "O'zbek", ru: 'Русский', en: 'English' };
+
+const translations = {
+  uz: {
+    subtitle: "Test hujjatini yuklang → tuzilgan test ma'lumotlarini oling",
+    dismiss: "Yopish",
+    dropText: ".docx, .pdf yoki .txt faylini shu yerga tashlang",
+    browseText: "yoki tanlash uchun bosing",
+    detectionLabel: "To'g'ri javobni aniqlash usuli",
+    mode_auto: "Avtomatik aniqlash",
+    mode_bold: "Qalin matn",
+    mode_underline: "Tagiga chizilgan matn",
+    mode_plus: "+ belgisi",
+    mode_star: "* belgisi",
+    mode_hash: "# belgisi",
+    mode_checkbox: "[x] katakcha",
+    parsing: "Hujjat tahlil qilinmoqda… {progress}%",
+    parseFailed: "Tahlil amalga oshmadi",
+    playBtn: "Testni boshlash",
+    newFileBtn: "Yangi fayl",
+    addOption: "+ variant qo'shish",
+    explanationLabel: "Izoh",
+    deleteTitle: "O'chirish",
+    noQuestionsToPlay: "O'ynash uchun savol yo'q — to'g'ri javob belgilanmagan.",
+    back: "Orqaga",
+    wrongAnswersLabel: "Xato javoblar",
+    yourAnswer: "Sizning javobingiz",
+    correctAnswer: "To'g'ri javob",
+    playAgain: "Qayta o'ynash",
+    backToEdit: "Tahrirlashga qaytish",
+    scoreLabel: "Ball",
+    nextBtn: "Keyingi savol",
+    viewResults: "Natijani ko'rish",
+    resultHeading: "Yakuniy natija",
+    questionCounter: "Savol {i} / {total}",
+    timeSetupHeading: "Vaqtni tanlang",
+    timeSetupSubtitle: "Har bir savolga qancha vaqt ajratmoqchisiz?",
+    timeOptionSeconds: "{n} soniya",
+    timeOptionNone: "Vaqt cheklanmagan",
+    finishTest: "Testni yakunlash",
+    timeUp: "Vaqt tugadi",
+    timeSpentLabel: "Sarflangan vaqt",
+    attemptedLabel: "Javob berilgan",
+    createdBy: "Yaratuvchi",
+    flags: {
+      missing_correct_answer: "to'g'ri javob belgilanmagan",
+      fewer_than_2_options: "variantlar 2 tadan kam",
+      empty_question_text: "savol matni bo'sh",
+      duplicate_options: "takrorlanuvchi variantlar",
+      multiple_correct_answers: "bir nechta to'g'ri javob belgilangan",
+      possible_parse_artifact: "tahlil xatosi bo'lishi mumkin",
+    },
+  },
+  ru: {
+    subtitle: "Загрузите документ с тестом → получите структурированные данные",
+    dismiss: "Закрыть",
+    dropText: "Перетащите файл .docx, .pdf или .txt сюда",
+    browseText: "или нажмите, чтобы выбрать",
+    detectionLabel: "Способ определения правильного ответа",
+    mode_auto: "Автоопределение",
+    mode_bold: "Жирный текст",
+    mode_underline: "Подчёркнутый текст",
+    mode_plus: "Префикс +",
+    mode_star: "Префикс *",
+    mode_hash: "Префикс #",
+    mode_checkbox: "Флажок [x]",
+    parsing: "Анализ документа… {progress}%",
+    parseFailed: "Не удалось разобрать документ",
+    playBtn: "Начать тест",
+    newFileBtn: "Новый файл",
+    addOption: "+ добавить вариант",
+    explanationLabel: "Пояснение",
+    deleteTitle: "Удалить",
+    noQuestionsToPlay: "Нет вопросов для игры — правильный ответ не отмечен.",
+    back: "Назад",
+    wrongAnswersLabel: "Неверные ответы",
+    yourAnswer: "Ваш ответ",
+    correctAnswer: "Правильный ответ",
+    playAgain: "Играть снова",
+    backToEdit: "Вернуться к редактированию",
+    scoreLabel: "Баллы",
+    nextBtn: "Следующий вопрос",
+    viewResults: "Посмотреть результат",
+    resultHeading: "Итоговый результат",
+    questionCounter: "Вопрос {i} из {total}",
+    timeSetupHeading: "Выберите время",
+    timeSetupSubtitle: "Сколько времени дать на один вопрос?",
+    timeOptionSeconds: "{n} секунд",
+    timeOptionNone: "Без ограничения времени",
+    finishTest: "Завершить тест",
+    timeUp: "Время вышло",
+    timeSpentLabel: "Затраченное время",
+    attemptedLabel: "Отвечено",
+    createdBy: "Автор",
+    flags: {
+      missing_correct_answer: "правильный ответ не отмечен",
+      fewer_than_2_options: "менее 2 вариантов",
+      empty_question_text: "пустой текст вопроса",
+      duplicate_options: "повторяющиеся варианты",
+      multiple_correct_answers: "отмечено несколько правильных ответов",
+      possible_parse_artifact: "возможна ошибка распознавания",
+    },
+  },
+  en: {
+    subtitle: "Upload a test document → get structured quiz data",
+    dismiss: "Dismiss",
+    dropText: "Drop a .docx, .pdf, or .txt file here",
+    browseText: "or click to browse",
+    detectionLabel: "Correct-answer detection",
+    mode_auto: "Auto-detect",
+    mode_bold: "Bold text",
+    mode_underline: "Underlined text",
+    mode_plus: "+ prefix",
+    mode_star: "* prefix",
+    mode_hash: "# prefix",
+    mode_checkbox: "[x] checkbox",
+    parsing: "Parsing document… {progress}%",
+    parseFailed: "Parse failed",
+    playBtn: "Start Quiz",
+    newFileBtn: "New File",
+    addOption: "+ add option",
+    explanationLabel: "Explanation",
+    deleteTitle: "Delete",
+    noQuestionsToPlay: "No questions to play — no correct answer marked.",
+    back: "Back",
+    wrongAnswersLabel: "Wrong answers",
+    yourAnswer: "Your answer",
+    correctAnswer: "Correct answer",
+    playAgain: "Play again",
+    backToEdit: "Back to editing",
+    scoreLabel: "Score",
+    nextBtn: "Next question",
+    viewResults: "View results",
+    resultHeading: "Final result",
+    questionCounter: "Question {i} / {total}",
+    timeSetupHeading: "Choose your time",
+    timeSetupSubtitle: "How much time per question?",
+    timeOptionSeconds: "{n} seconds",
+    timeOptionNone: "No time limit",
+    finishTest: "Finish test",
+    timeUp: "Time's up",
+    timeSpentLabel: "Time spent",
+    attemptedLabel: "Answered",
+    createdBy: "Created by",
+    flags: {
+      missing_correct_answer: "no correct answer marked",
+      fewer_than_2_options: "fewer than 2 options",
+      empty_question_text: "empty question text",
+      duplicate_options: "duplicate options",
+      multiple_correct_answers: "multiple correct answers marked",
+      possible_parse_artifact: "possible parse artifact",
+    },
+  },
+};
+
+function ruPlural(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+  return many;
+}
+
+const COUNT_TEXTS = {
+  questionsCount: {
+    uz: (n) => `${n} ta savol`,
+    ru: (n) => `${n} ${ruPlural(n, 'вопрос', 'вопроса', 'вопросов')}`,
+    en: (n) => `${n} question${n === 1 ? '' : 's'}`,
+  },
+  needReview: {
+    uz: (n) => `${n} ta tekshirish talab qiladi`,
+    ru: (n) => `${n} ${ruPlural(n, 'требует', 'требуют', 'требуют')} проверки`,
+    en: (n) => `${n} need${n === 1 ? 's' : ''} review`,
+  },
+  skippedNote: {
+    uz: (n) => `${n} ta savol o'tkazib yuborildi — to'g'ri javob belgilanmagan.`,
+    ru: (n) => `${n} ${ruPlural(n, 'вопрос', 'вопроса', 'вопросов')} пропущено — правильный ответ не отмечен.`,
+    en: (n) => `${n} question${n === 1 ? '' : 's'} skipped — no correct answer marked.`,
+  },
+};
+
+function resultFeedback(lang, pct) {
+  if (lang === 'ru') {
+    if (pct >= 80) return '🎉 Отлично!';
+    if (pct >= 50) return '👍 Хорошо!';
+    return '💪 Попробуйте ещё раз';
+  }
+  if (lang === 'en') {
+    if (pct >= 80) return '🎉 Excellent!';
+    if (pct >= 50) return '👍 Good job!';
+    return '💪 Keep practicing';
+  }
+  if (pct >= 80) return "🎉 Ajoyib!";
+  if (pct >= 50) return "👍 Yaxshi natija!";
+  return "💪 Yana urinib ko'ring";
+}
+
+function formatDuration(ms) {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+const LangContext = createContext({ lang: 'uz', setLang: () => {} });
+function useLang() { return useContext(LangContext); }
+
+function useT() {
+  const { lang } = useLang();
+  const dict = translations[lang] || translations.uz;
+  const t = (key, vars) => {
+    let str = dict[key];
+    if (str === undefined) str = translations.en[key];
+    if (str === undefined) return key;
+    if (vars) Object.keys(vars).forEach((k) => { str = str.split(`{${k}}`).join(vars[k]); });
+    return str;
+  };
+  const tFlag = (f) => (dict.flags && dict.flags[f]) || f;
+  const tCount = (key, n) => COUNT_TEXTS[key][lang](n);
+  return { t, tFlag, tCount, lang };
+}
+
+function LangProvider({ children }) {
+  const [lang, setLangState] = useState(() => {
+    const saved = localStorage.getItem('quizParserLang');
+    return LANGS.includes(saved) ? saved : 'uz';
+  });
+  const setLang = (l) => { setLangState(l); localStorage.setItem('quizParserLang', l); };
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  return <LangContext.Provider value={{ lang, setLang }}>{children}</LangContext.Provider>;
+}
+
+function LanguageSwitcher() {
+  const { lang, setLang } = useLang();
+  return (
+    <div className="inline-flex bg-gray-100 rounded-full p-1 gap-0.5" role="group" aria-label="Language">
+      {LANGS.map((l) => (
+        <button
+          key={l}
+          onClick={() => setLang(l)}
+          className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all ${
+            lang === l ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {LANG_NAMES[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ─── App ────────────────────────────────────────────────────
 
 function App() {
-  const [stage, setStage]         = useState('upload');   // upload | polling | editor
+  const [stage, setStage]         = useState('upload');   // upload | polling | editor | play
   const [jobId, setJobId]         = useState(null);
   const [questions, setQuestions] = useState([]);
   const [error, setError]         = useState('');
   const [filename, setFilename]   = useState('');
+  const { t } = useT();
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <header className="mb-8 text-center">
-        <h1 className="text-3xl font-bold" style={{color:'var(--accent)'}}>Quiz Parser</h1>
-        <p className="text-gray-500 mt-1">Upload a test document → get structured quiz data</p>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+      <header className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 mb-10">
+        <div className="flex items-center gap-3 text-center sm:text-left">
+          <div className="logo-badge">✓</div>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight gradient-text">ParseQuiz</h1>
+            <p className="text-gray-500 mt-0.5 text-sm sm:text-base">{t('subtitle')}</p>
+          </div>
+        </div>
+        <LanguageSwitcher />
       </header>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-          <button className="ml-4 underline" onClick={() => setError('')}>dismiss</button>
+        <div className="fade-in bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center justify-between gap-4">
+          <span>{error}</span>
+          <button className="text-sm font-semibold underline flex-shrink-0" onClick={() => setError('')}>{t('dismiss')}</button>
         </div>
       )}
 
-      {stage === 'upload' && (
-        <UploadZone
-          onJobStarted={(id, name) => { setJobId(id); setFilename(name); setStage('polling'); }}
-          onError={setError}
-        />
-      )}
+      <div key={stage} className="fade-in">
+        {stage === 'upload' && (
+          <UploadZone
+            onJobStarted={(id, name) => { setJobId(id); setFilename(name); setStage('polling'); }}
+            onError={setError}
+          />
+        )}
 
-      {stage === 'polling' && (
-        <Poller
-          jobId={jobId}
-          onDone={(qs) => { setQuestions(qs); setStage('editor'); }}
-          onError={(e) => { setError(e); setStage('upload'); }}
-        />
-      )}
+        {stage === 'polling' && (
+          <Poller
+            jobId={jobId}
+            onDone={(qs) => { setQuestions(qs); setStage('editor'); }}
+            onError={(e) => { setError(e); setStage('upload'); }}
+          />
+        )}
 
-      {stage === 'editor' && (
-        <Editor
-          questions={questions}
-          setQuestions={setQuestions}
-          filename={filename}
-          onReset={() => { setStage('upload'); setQuestions([]); setJobId(null); }}
-          onPlay={() => setStage('play')}
-        />
-      )}
+        {stage === 'editor' && (
+          <Editor
+            questions={questions}
+            setQuestions={setQuestions}
+            filename={filename}
+            onReset={() => { setStage('upload'); setQuestions([]); setJobId(null); }}
+            onPlay={() => setStage('play')}
+          />
+        )}
 
-      {stage === 'play' && (
-        <PlayQuiz questions={questions} onExit={() => setStage('editor')} />
-      )}
+        {stage === 'play' && (
+          <PlayQuiz questions={questions} onExit={() => setStage('editor')} />
+        )}
+      </div>
+
+      <footer className="mt-14 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+        <a
+          href="https://t.me/Whoami_003"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 hover:text-green-600 transition-colors font-medium"
+        >
+          <span>{t('createdBy')}: Umidjon Nematov</span>
+          <span className="text-gray-300">·</span>
+          <span>@Whoami_003</span>
+        </a>
+      </footer>
     </div>
   );
 }
@@ -89,6 +416,7 @@ function App() {
 // ─── Upload Drop Zone ───────────────────────────────────────
 
 function UploadZone({ onJobStarted, onError }) {
+  const { t } = useT();
   const [dragging, setDragging] = useState(false);
   const [mode, setMode]         = useState('auto');
   const inputRef = useRef();
@@ -111,36 +439,38 @@ function UploadZone({ onJobStarted, onError }) {
     if (file) handleFile(file);
   };
 
+  const modes = ['auto', 'bold', 'underline', 'plus', 'star', 'hash', 'checkbox'];
+
   return (
     <div>
       <div
-        className={`drop-zone rounded-xl p-12 text-center cursor-pointer ${dragging ? 'active' : ''}`}
+        className={`drop-zone rounded-2xl p-14 text-center cursor-pointer ${dragging ? 'active' : ''}`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current.click()}
       >
-        <svg className="mx-auto mb-4 text-gray-400" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className={`mx-auto mb-4 transition-transform duration-200 ${dragging ? 'scale-110 text-green-500' : 'text-gray-400'}`}
+          width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
         </svg>
-        <p className="text-gray-600 font-medium">Drop a .docx, .pdf, or .txt file here</p>
-        <p className="text-gray-400 text-sm mt-1">or click to browse</p>
+        <p className="text-gray-700 font-semibold">{t('dropText')}</p>
+        <p className="text-gray-400 text-sm mt-1">{t('browseText')}</p>
         <input ref={inputRef} type="file" accept=".docx,.pdf,.txt" className="hidden"
           onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
       </div>
 
-      <div className="mt-4 flex items-center justify-center gap-3 text-sm text-gray-500">
-        <label>Correct-answer detection:</label>
-        <select value={mode} onChange={(e) => setMode(e.target.value)}
-          className="border rounded px-2 py-1">
-          <option value="auto">Auto-detect</option>
-          <option value="bold">Bold text</option>
-          <option value="underline">Underlined text</option>
-          <option value="plus">+ prefix</option>
-          <option value="star">* prefix</option>
-          <option value="hash"># prefix</option>
-          <option value="checkbox">[x] checkbox</option>
-        </select>
+      <div className="mt-5 flex items-center justify-center gap-3 text-sm text-gray-500">
+        <label className="font-medium">{t('detectionLabel')}:</label>
+        <div className="relative">
+          <select value={mode} onChange={(e) => setMode(e.target.value)}
+            className="appearance-none border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 bg-white text-sm text-gray-700 cursor-pointer hover:border-gray-300">
+            {modes.map((m) => <option key={m} value={m}>{t(`mode_${m}`)}</option>)}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </div>
     </div>
   );
@@ -149,6 +479,7 @@ function UploadZone({ onJobStarted, onError }) {
 // ─── Poller ─────────────────────────────────────────────────
 
 function Poller({ jobId, onDone, onError }) {
+  const { t } = useT();
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -160,7 +491,7 @@ function Poller({ jobId, onDone, onError }) {
         if (!active) return;
         setProgress(Math.round((data.progress || 0) * 100));
         if (data.status === 'done')   return onDone(data.questions);
-        if (data.status === 'failed') return onError(data.error || 'Parse failed');
+        if (data.status === 'failed') return onError(data.error || t('parseFailed'));
         setTimeout(poll, 800);
       } catch (e) { if (active) onError(e.message); }
     };
@@ -169,9 +500,12 @@ function Poller({ jobId, onDone, onError }) {
   }, [jobId]);
 
   return (
-    <div className="text-center py-16">
-      <div className="inline-block w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4" />
-      <p className="text-gray-600">Parsing document… {progress}%</p>
+    <div className="text-center py-20">
+      <div className="inline-block w-12 h-12 border-4 border-green-100 border-t-green-600 rounded-full animate-spin mb-5" />
+      <p className="text-gray-600 font-medium mb-4">{t('parsing', { progress })}</p>
+      <div className="max-w-xs mx-auto progress-track h-1.5">
+        <div className="progress-fill h-full" style={{ width: `${progress}%` }} />
+      </div>
     </div>
   );
 }
@@ -179,6 +513,7 @@ function Poller({ jobId, onDone, onError }) {
 // ─── Editor ─────────────────────────────────────────────────
 
 function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
+  const { t, tCount } = useT();
   const flagged  = questions.filter(q => q.flags && q.flags.length > 0).length;
   const total    = questions.length;
 
@@ -208,20 +543,20 @@ function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div>
-          <span className="font-semibold text-lg">{total} questions</span>
+      <div className="sticky top-3 z-10 card bg-white/90 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-bold text-lg text-gray-800">{tCount('questionsCount', total)}</span>
           {flagged > 0 && (
-            <span className="ml-3 flag-badge">{flagged} need review</span>
+            <span className="flag-badge">{tCount('needReview', flagged)}</span>
           )}
-          <span className="ml-3 text-gray-400 text-sm">{filename}</span>
+          <span className="text-gray-400 text-sm truncate max-w-[160px]">{filename}</span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={onPlay} className="btn-primary px-3 py-1.5 rounded text-sm">▶ Play Quiz</button>
-          <button onClick={() => exportAs('json')} className="btn-primary px-3 py-1.5 rounded text-sm">JSON</button>
-          <button onClick={() => exportAs('xlsx')} className="btn-primary px-3 py-1.5 rounded text-sm">Excel</button>
-          <button onClick={() => exportAs('csv')}  className="btn-primary px-3 py-1.5 rounded text-sm">CSV</button>
-          <button onClick={onReset} className="border px-3 py-1.5 rounded text-sm text-gray-600 hover:bg-gray-100">New File</button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={onPlay} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">▶ {t('playBtn')}</button>
+          <button onClick={() => exportAs('json')} className="btn-soft px-3 py-2 rounded-xl text-sm">JSON</button>
+          <button onClick={() => exportAs('xlsx')} className="btn-soft px-3 py-2 rounded-xl text-sm">Excel</button>
+          <button onClick={() => exportAs('csv')}  className="btn-soft px-3 py-2 rounded-xl text-sm">CSV</button>
+          <button onClick={onReset} className="btn-ghost px-3 py-2 rounded-xl text-sm font-semibold">{t('newFileBtn')}</button>
         </div>
       </div>
 
@@ -238,71 +573,77 @@ function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
 // ─── Single Question Card ───────────────────────────────────
 
 function QuestionCard({ q, idx, updateQ, deleteQ }) {
-  const hasFlagOfType = (type) => q.flags && q.flags.includes(type);
-  const borderColor = q.flags && q.flags.length > 0 ? 'border-orange-300' : 'border-gray-200';
+  const { t, tFlag } = useT();
+  const isFlagged = q.flags && q.flags.length > 0;
 
   return (
-    <div className={`bg-white rounded-lg border ${borderColor} p-4 shadow-sm`}>
+    <div className={`card relative overflow-hidden p-5 ${isFlagged ? 'ring-1 ring-orange-200' : ''}`}>
+      {isFlagged && <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-400" />}
       <div className="flex items-start gap-3">
-        <span className="text-gray-400 font-mono text-sm mt-1 select-none">{idx + 1}.</span>
-        <div className="flex-1">
+        <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 select-none">{idx + 1}</div>
+        <div className="flex-1 min-w-0">
           {/* Question text */}
           <textarea
-            className="w-full border-0 text-gray-800 font-medium resize-none bg-transparent"
+            className="w-full border-0 text-gray-800 font-semibold resize-none bg-transparent leading-snug"
             rows={2}
             value={q.question}
             onChange={(e) => updateQ(idx, { question: e.target.value })}
           />
 
           {/* Flags */}
-          {q.flags && q.flags.length > 0 && (
-            <div className="flex gap-1 mb-2">
-              {q.flags.map(f => <span key={f} className="flag-badge">{f.replace(/_/g, ' ')}</span>)}
+          {isFlagged && (
+            <div className="flex flex-wrap gap-1 mb-3">
+              {q.flags.map(f => <span key={f} className="flag-badge">{tFlag(f)}</span>)}
             </div>
           )}
 
           {/* Options */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-            {q.options.map((opt, oi) => (
-              <div key={oi}
-                className={`flex items-center gap-2 rounded px-3 py-2 text-sm cursor-pointer border
-                  ${q.correct_option_index === oi ? 'correct-ring bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}
-                onClick={() => updateQ(idx, { correct_option_index: oi })}
-              >
-                <span className="font-mono text-xs text-gray-400 select-none">{String.fromCharCode(65 + oi)}</span>
-                <input
-                  className="flex-1 bg-transparent border-0 text-gray-700"
-                  value={opt}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    const newOpts = [...q.options];
-                    newOpts[oi] = e.target.value;
-                    updateQ(idx, { options: newOpts });
-                  }}
-                />
-                {q.correct_option_index === oi && (
-                  <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                  </svg>
-                )}
-              </div>
-            ))}
+            {q.options.map((opt, oi) => {
+              const isCorrect = q.correct_option_index === oi;
+              return (
+                <div key={oi}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm cursor-pointer border transition-colors
+                    ${isCorrect ? 'correct-ring bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}
+                  onClick={() => updateQ(idx, { correct_option_index: oi })}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 select-none ${isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                    {String.fromCharCode(65 + oi)}
+                  </span>
+                  <input
+                    className="flex-1 bg-transparent border-0 text-gray-700 min-w-0"
+                    value={opt}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const newOpts = [...q.options];
+                      newOpts[oi] = e.target.value;
+                      updateQ(idx, { options: newOpts });
+                    }}
+                  />
+                  {isCorrect && (
+                    <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                    </svg>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Add option button */}
           {q.options.length < 6 && (
             <button
-              className="text-xs text-green-600 mt-2 hover:underline"
+              className="text-xs text-green-700 font-semibold mt-2.5 hover:underline"
               onClick={() => updateQ(idx, { options: [...q.options, ''] })}
-            >+ add option</button>
+            >{t('addOption')}</button>
           )}
 
           {/* Explanation */}
           {q.explanation && (
-            <div className="mt-2 text-xs text-gray-500 italic">
-              <span className="font-semibold">Explanation:</span>{' '}
+            <div className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="font-semibold">{t('explanationLabel')}:</span>{' '}
               <input
-                className="bg-transparent border-0 text-gray-500 w-full"
+                className="bg-transparent border-0 text-gray-500 w-full italic"
                 value={q.explanation}
                 onChange={(e) => updateQ(idx, { explanation: e.target.value })}
               />
@@ -312,7 +653,7 @@ function QuestionCard({ q, idx, updateQ, deleteQ }) {
 
         {/* Delete button */}
         <button onClick={() => deleteQ(idx)}
-          className="text-gray-300 hover:text-red-500 transition-colors mt-1" title="Delete">
+          className="text-gray-300 hover:text-red-500 transition-colors mt-1 flex-shrink-0" title={t('deleteTitle')}>
           <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -322,9 +663,59 @@ function QuestionCard({ q, idx, updateQ, deleteQ }) {
   );
 }
 
+// ─── Time Setup ─────────────────────────────────────────────
+
+function TimeSetup({ onStart }) {
+  const { t } = useT();
+  const options = [15, 30, 60, null];
+  return (
+    <div className="max-w-md mx-auto text-center py-14 fade-in">
+      <h2 className="text-xl font-bold text-gray-800 mb-2">{t('timeSetupHeading')}</h2>
+      <p className="text-gray-500 text-sm mb-6">{t('timeSetupSubtitle')}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {options.map((sec) => (
+          <button
+            key={sec === null ? 'none' : sec}
+            onClick={() => onStart(sec)}
+            className="card px-4 py-4 text-sm font-semibold text-gray-700 hover:ring-2 hover:ring-green-300"
+          >
+            {sec === null ? t('timeOptionNone') : t('timeOptionSeconds', { n: sec })}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Per-question countdown ─────────────────────────────────
+
+function QuestionTimer({ duration, onExpire }) {
+  const [remaining, setRemaining] = useState(duration);
+
+  useEffect(() => {
+    if (remaining <= 0) { onExpire(); return; }
+    const id = setTimeout(() => setRemaining(r => r - 1), 1000);
+    return () => clearTimeout(id);
+  }, [remaining]);
+
+  const pct = Math.max(0, (remaining / duration) * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="progress-track h-1.5 w-20">
+        <div
+          className="progress-fill h-full"
+          style={{ width: `${pct}%`, background: pct <= 25 ? 'var(--danger)' : undefined }}
+        />
+      </div>
+      <span className="text-xs font-semibold text-gray-500 tabular-nums w-6 text-right">{remaining}s</span>
+    </div>
+  );
+}
+
 // ─── Play Quiz ──────────────────────────────────────────────
 
 function PlayQuiz({ questions, onExit }) {
+  const { t, tCount, lang } = useT();
   const order = React.useMemo(
     () => questions.filter(q =>
       q.correct_option_index !== null &&
@@ -336,55 +727,91 @@ function PlayQuiz({ questions, onExit }) {
   );
   const skipped = questions.length - order.length;
 
+  const [phase, setPhase] = useState('setup'); // 'setup' | 'quiz' | 'results'
+  const [duration, setDuration] = useState(null); // seconds per question, or null = no limit
+  const [startTime, setStartTime] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState(null);
   const [score, setScore] = useState(0);
+  const [attempted, setAttempted] = useState(0);
   const [wrongQuestions, setWrongQuestions] = useState([]);
-  const [phase, setPhase] = useState('quiz'); // 'quiz' | 'results'
 
-  const restart = () => {
-    setIndex(0); setSelected(null); setScore(0); setWrongQuestions([]); setPhase('quiz');
+  const startQuiz = (sec) => {
+    setDuration(sec);
+    setStartTime(Date.now());
+    setIndex(0); setSelected(null); setScore(0); setAttempted(0); setWrongQuestions([]);
+    setPhase('quiz');
+  };
+
+  const restart = () => setPhase('setup');
+
+  const finalize = (finalScore, finalAttempted, finalWrong) => {
+    setScore(finalScore);
+    setAttempted(finalAttempted);
+    setWrongQuestions(finalWrong);
+    setElapsedMs(Date.now() - startTime);
+    setPhase('results');
   };
 
   if (order.length === 0) {
     return (
-      <div className="text-center py-16">
-        <p className="text-gray-600 mb-4">
-          O'ynash uchun savol yo'q — to'g'ri javob belgilanmagan.
-        </p>
-        <button onClick={onExit} className="border px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">
-          Orqaga
+      <div className="text-center py-20 fade-in">
+        <p className="text-gray-600 mb-4">{t('noQuestionsToPlay')}</p>
+        <button onClick={onExit} className="btn-ghost px-4 py-2 rounded-xl text-sm font-semibold">
+          {t('back')}
         </button>
       </div>
     );
   }
 
+  if (phase === 'setup') {
+    return <TimeSetup onStart={startQuiz} />;
+  }
+
   if (phase === 'results') {
-    const pct = Math.round((score / order.length) * 100);
+    const pct = attempted > 0 ? Math.round((score / attempted) * 100) : 0;
     return (
-      <div className="text-center py-8">
-        <h2 className="text-2xl font-bold mb-2">Natija: {score} / {order.length} ({pct}%)</h2>
+      <div className="text-center py-8 fade-in max-w-2xl mx-auto">
+        <h2 className="text-xl font-bold text-gray-500 mb-4">{t('resultHeading')}</h2>
+        <div
+          style={{ width: 140, height: 140, background: `conic-gradient(var(--accent-2) ${pct * 3.6}deg, #e2e8f0 0deg)` }}
+          className="mx-auto mb-2 rounded-full flex items-center justify-center"
+        >
+          <div className="bg-white rounded-full w-[112px] h-[112px] flex flex-col items-center justify-center">
+            <span className="text-3xl font-extrabold text-gray-800">{pct}%</span>
+            <span className="text-xs text-gray-400">{score}/{attempted}</span>
+          </div>
+        </div>
+        <p className="text-lg font-semibold mb-3">{resultFeedback(lang, pct)}</p>
+        <div className="flex justify-center gap-4 text-xs text-gray-500 mb-6">
+          <span className="bg-gray-100 rounded-full px-3 py-1 font-semibold">{t('attemptedLabel')}: {attempted}/{order.length}</span>
+          <span className="bg-gray-100 rounded-full px-3 py-1 font-semibold">{t('timeSpentLabel')}: {formatDuration(elapsedMs)}</span>
+        </div>
         {wrongQuestions.length > 0 && (
-          <div className="text-left max-w-2xl mx-auto mt-6 space-y-2">
-            <p className="font-semibold text-gray-700">Xato javoblar:</p>
+          <div className="text-left mt-6 space-y-2">
+            <p className="font-semibold text-gray-700">{t('wrongAnswersLabel')}:</p>
             {wrongQuestions.map((w, i) => (
-              <div key={i} className="bg-red-50 border border-red-200 rounded p-3 text-sm">
-                <p className="font-medium">{w.question}</p>
-                <p className="text-red-600">Sizning javobingiz: {w.yourAnswer}</p>
-                <p className="text-green-700">To'g'ri javob: {w.correctAnswer}</p>
+              <div key={i} className="card bg-red-50/60 border border-red-100 p-3 text-sm">
+                <p className="font-medium text-gray-800">{w.question}</p>
+                <p className="text-red-600">{t('yourAnswer')}: {w.yourAnswer}</p>
+                <p className="text-green-700">{t('correctAnswer')}: {w.correctAnswer}</p>
               </div>
             ))}
           </div>
         )}
         <div className="flex justify-center gap-3 mt-8">
-          <button onClick={restart} className="btn-primary px-4 py-2 rounded text-sm">Qayta o'ynash</button>
-          <button onClick={onExit} className="border px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">
-            Tahrirlashga qaytish
+          <button onClick={restart} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">{t('playAgain')}</button>
+          <button onClick={onExit} className="btn-ghost px-4 py-2 rounded-xl text-sm font-semibold">
+            {t('backToEdit')}
           </button>
         </div>
       </div>
     );
   }
+
+  // ── phase === 'quiz' ──
 
   const q = order[index];
   const isLast = index === order.length - 1;
@@ -392,6 +819,7 @@ function PlayQuiz({ questions, onExit }) {
   const answer = (oi) => {
     if (selected !== null) return;
     setSelected(oi);
+    setAttempted(a => a + 1);
     if (oi === q.correct_option_index) {
       setScore(s => s + 1);
     } else {
@@ -403,8 +831,22 @@ function PlayQuiz({ questions, onExit }) {
     }
   };
 
+  const expire = () => {
+    if (selected !== null) return;
+    setSelected(-1);
+    setAttempted(a => a + 1);
+    setWrongQuestions(w => [...w, {
+      question: q.question,
+      yourAnswer: t('timeUp'),
+      correctAnswer: q.options[q.correct_option_index],
+    }]);
+  };
+
   const next = () => {
-    if (isLast) { setPhase('results'); return; }
+    if (isLast) {
+      finalize(score, attempted, wrongQuestions);
+      return;
+    }
     setIndex(i => i + 1);
     setSelected(null);
   };
@@ -412,16 +854,20 @@ function PlayQuiz({ questions, onExit }) {
   return (
     <div className="max-w-2xl mx-auto">
       {skipped > 0 && index === 0 && (
-        <p className="text-xs text-gray-400 mb-3">
-          {skipped} ta savol o'tkazib yuborildi — to'g'ri javob belgilanmagan.
-        </p>
+        <p className="text-xs text-gray-400 mb-3">{tCount('skippedNote', skipped)}</p>
       )}
-      <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
-        <span>Savol {index + 1} / {order.length}</span>
-        <span>Ball: {score}</span>
+      <div className="progress-track h-1.5 mb-4">
+        <div className="progress-fill h-full" style={{ width: `${((index + (selected !== null ? 1 : 0)) / order.length) * 100}%` }} />
       </div>
-      <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-        <p className="font-medium text-gray-800 mb-4">{q.question}</p>
+      <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
+        <span>{t('questionCounter', { i: index + 1, total: order.length })}</span>
+        <div className="flex items-center gap-3">
+          {duration !== null && selected === null && <QuestionTimer key={index} duration={duration} onExpire={expire} />}
+          <span className="bg-gray-100 rounded-full px-3 py-1 font-semibold">{t('scoreLabel')}: {score}</span>
+        </div>
+      </div>
+      <div key={index} className="card fade-in p-6">
+        <p className="font-semibold text-gray-800 mb-4 text-lg leading-snug">{q.question}</p>
         <div className="space-y-2">
           {q.options.map((opt, oi) => {
             let cls = 'bg-gray-50 border-gray-200 hover:bg-gray-100';
@@ -433,27 +879,36 @@ function PlayQuiz({ questions, onExit }) {
               <div
                 key={oi}
                 onClick={() => answer(oi)}
-                className={`flex items-center gap-2 rounded px-3 py-2 text-sm border cursor-pointer ${cls}`}
+                className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm border cursor-pointer transition-colors ${cls}`}
               >
-                <span className="font-mono text-xs text-gray-400 select-none">{String.fromCharCode(65 + oi)}</span>
+                <span className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-bold flex-shrink-0 text-gray-500 select-none">
+                  {String.fromCharCode(65 + oi)}
+                </span>
                 <span className="flex-1">{opt}</span>
               </div>
             );
           })}
         </div>
-        {selected !== null && (
-          <div className="mt-4 text-right">
-            <button onClick={next} className="btn-primary px-4 py-2 rounded text-sm">
-              {isLast ? "Natijani ko'rish" : 'Keyingi savol →'}
+        <div className="mt-5 flex items-center justify-between">
+          <button
+            onClick={() => finalize(score, attempted, wrongQuestions)}
+            className="text-xs text-gray-400 hover:text-red-500 font-semibold underline"
+          >{t('finishTest')}</button>
+          {selected !== null && (
+            <button onClick={next} className="btn-primary px-5 py-2 rounded-xl text-sm font-semibold">
+              {isLast ? t('viewResults') : `${t('nextBtn')} →`}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-ReactDOM.render(React.createElement(App), document.getElementById('root'));
+ReactDOM.render(
+  <LangProvider><App /></LangProvider>,
+  document.getElementById('root')
+);
 </script>
 </body>
 </html>
