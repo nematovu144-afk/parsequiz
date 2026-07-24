@@ -1,6 +1,6 @@
 @echo off
 REM ===========================================
-REM  Quiz Parser - Windows setup skripti
+REM  ParseQuiz - Windows setup skripti
 REM  Bir marta ishga tushiring: setup.bat
 REM ===========================================
 
