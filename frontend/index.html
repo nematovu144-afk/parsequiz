@@ -75,7 +75,12 @@ function App() {
           setQuestions={setQuestions}
           filename={filename}
           onReset={() => { setStage('upload'); setQuestions([]); setJobId(null); }}
+          onPlay={() => setStage('play')}
         />
+      )}
+
+      {stage === 'play' && (
+        <PlayQuiz questions={questions} onExit={() => setStage('editor')} />
       )}
     </div>
   );
@@ -173,7 +178,7 @@ function Poller({ jobId, onDone, onError }) {
 
 // ─── Editor ─────────────────────────────────────────────────
 
-function Editor({ questions, setQuestions, filename, onReset }) {
+function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
   const flagged  = questions.filter(q => q.flags && q.flags.length > 0).length;
   const total    = questions.length;
 
@@ -212,6 +217,7 @@ function Editor({ questions, setQuestions, filename, onReset }) {
           <span className="ml-3 text-gray-400 text-sm">{filename}</span>
         </div>
         <div className="flex gap-2">
+          <button onClick={onPlay} className="btn-primary px-3 py-1.5 rounded text-sm">▶ Play Quiz</button>
           <button onClick={() => exportAs('json')} className="btn-primary px-3 py-1.5 rounded text-sm">JSON</button>
           <button onClick={() => exportAs('xlsx')} className="btn-primary px-3 py-1.5 rounded text-sm">Excel</button>
           <button onClick={() => exportAs('csv')}  className="btn-primary px-3 py-1.5 rounded text-sm">CSV</button>
@@ -311,6 +317,137 @@ function QuestionCard({ q, idx, updateQ, deleteQ }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Play Quiz ──────────────────────────────────────────────
+
+function PlayQuiz({ questions, onExit }) {
+  const order = React.useMemo(
+    () => questions.filter(q =>
+      q.correct_option_index !== null &&
+      q.correct_option_index !== undefined &&
+      q.correct_option_index >= 0 &&
+      q.correct_option_index < q.options.length
+    ),
+    [questions]
+  );
+  const skipped = questions.length - order.length;
+
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [score, setScore] = useState(0);
+  const [wrongQuestions, setWrongQuestions] = useState([]);
+  const [phase, setPhase] = useState('quiz'); // 'quiz' | 'results'
+
+  const restart = () => {
+    setIndex(0); setSelected(null); setScore(0); setWrongQuestions([]); setPhase('quiz');
+  };
+
+  if (order.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-600 mb-4">
+          O'ynash uchun savol yo'q — to'g'ri javob belgilanmagan.
+        </p>
+        <button onClick={onExit} className="border px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">
+          Orqaga
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === 'results') {
+    const pct = Math.round((score / order.length) * 100);
+    return (
+      <div className="text-center py-8">
+        <h2 className="text-2xl font-bold mb-2">Natija: {score} / {order.length} ({pct}%)</h2>
+        {wrongQuestions.length > 0 && (
+          <div className="text-left max-w-2xl mx-auto mt-6 space-y-2">
+            <p className="font-semibold text-gray-700">Xato javoblar:</p>
+            {wrongQuestions.map((w, i) => (
+              <div key={i} className="bg-red-50 border border-red-200 rounded p-3 text-sm">
+                <p className="font-medium">{w.question}</p>
+                <p className="text-red-600">Sizning javobingiz: {w.yourAnswer}</p>
+                <p className="text-green-700">To'g'ri javob: {w.correctAnswer}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-center gap-3 mt-8">
+          <button onClick={restart} className="btn-primary px-4 py-2 rounded text-sm">Qayta o'ynash</button>
+          <button onClick={onExit} className="border px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">
+            Tahrirlashga qaytish
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const q = order[index];
+  const isLast = index === order.length - 1;
+
+  const answer = (oi) => {
+    if (selected !== null) return;
+    setSelected(oi);
+    if (oi === q.correct_option_index) {
+      setScore(s => s + 1);
+    } else {
+      setWrongQuestions(w => [...w, {
+        question: q.question,
+        yourAnswer: q.options[oi],
+        correctAnswer: q.options[q.correct_option_index],
+      }]);
+    }
+  };
+
+  const next = () => {
+    if (isLast) { setPhase('results'); return; }
+    setIndex(i => i + 1);
+    setSelected(null);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      {skipped > 0 && index === 0 && (
+        <p className="text-xs text-gray-400 mb-3">
+          {skipped} ta savol o'tkazib yuborildi — to'g'ri javob belgilanmagan.
+        </p>
+      )}
+      <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
+        <span>Savol {index + 1} / {order.length}</span>
+        <span>Ball: {score}</span>
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+        <p className="font-medium text-gray-800 mb-4">{q.question}</p>
+        <div className="space-y-2">
+          {q.options.map((opt, oi) => {
+            let cls = 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+            if (selected !== null) {
+              if (oi === q.correct_option_index) cls = 'correct-ring bg-green-50 border-green-300';
+              else if (oi === selected) cls = 'bg-red-50 border-red-300';
+            }
+            return (
+              <div
+                key={oi}
+                onClick={() => answer(oi)}
+                className={`flex items-center gap-2 rounded px-3 py-2 text-sm border cursor-pointer ${cls}`}
+              >
+                <span className="font-mono text-xs text-gray-400 select-none">{String.fromCharCode(65 + oi)}</span>
+                <span className="flex-1">{opt}</span>
+              </div>
+            );
+          })}
+        </div>
+        {selected !== null && (
+          <div className="mt-4 text-right">
+            <button onClick={next} className="btn-primary px-4 py-2 rounded text-sm">
+              {isLast ? "Natijani ko'rish" : 'Keyingi savol →'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
