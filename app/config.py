@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Internal paths
     upload_dir: Path = Path("/tmp/quiz_parser_uploads")
 
+    # Job store — swap for postgresql+asyncpg://... if this ever needs
+    # a networked DB; SQLAlchemy model/query code stays identical.
+    database_url: str = "sqlite+aiosqlite:///./quiz_parser.db"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

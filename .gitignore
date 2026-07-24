@@ -23,3 +23,9 @@ __pycache__/
 # Yuklangan fayllar
 uploads/
 *.log
+
+# SQLite ma'lumotlar bazasi (runtime data)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

@@ -12,8 +12,11 @@ quiz-parser/
 │   │   ├── parse.py             # GET  /parse/{job_id} — poll status / results
 │   │   └── export.py            # POST /export  — JSON/XLSX/CSV download
 │   ├── core/
-│   │   ├── job_store.py         # In-memory (or Redis) job registry
+│   │   ├── job_store.py         # SQLite-backed job registry (app/db/)
 │   │   └── exceptions.py        # Domain exceptions
+│   ├── db/
+│   │   ├── base.py              # Async engine, session factory, declarative base
+│   │   └── models.py            # JobRecord ORM model
 │   ├── parsers/
 │   │   ├── base.py              # Abstract parser protocol
 │   │   ├── docx_parser.py       # python-docx extractor

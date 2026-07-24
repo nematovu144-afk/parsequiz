@@ -10,12 +10,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import export, parse, upload
 from app.config import settings  # noqa: F401 — force early init
+from app.db.base import Base, engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown hooks."""
-    yield  # nothing to tear down yet (swap for Redis pool etc.)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
 
 
 app = FastAPI(
