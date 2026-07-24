@@ -1,10 +1,9 @@
 """POST /api/export — export edited questions to JSON / XLSX / CSV."""
 
-from __future__ import annotations
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app.core.rate_limit import limiter
 from app.export.exporters import export_csv, export_json, export_xlsx
 from app.schemas.quiz import ExportRequest
 
@@ -12,7 +11,8 @@ router = APIRouter(tags=["export"])
 
 
 @router.post("/export")
-async def export_questions(req: ExportRequest):
+@limiter.limit("30/minute")
+async def export_questions(request: Request, req: ExportRequest):
     """Accept the (possibly user-edited) questions and return a download."""
     fmt = req.format.lower()
 

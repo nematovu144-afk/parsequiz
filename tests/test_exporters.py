@@ -81,3 +81,35 @@ def test_export_xlsx_sizes_columns_to_widest_question():
     assert ws.cell(row=1, column=8).value == "Option F"
     assert ws.cell(row=3, column=8).value == "Orange"  # 6th option not dropped
     assert ws.cell(row=3, column=9).value == "F"  # Correct column shifted past 6 options
+
+
+# ── Formula-injection hardening (CWE-1236) ──────────────────────
+
+INJECTION_QUESTIONS = [
+    Question(
+        question="=cmd|'/c calc'!A1",
+        options=["+SUM(A1:A9)", "-1+1", "@SUM(1,1)", "safe option"],
+        correct_option_index=3,
+        explanation="=HYPERLINK(\"http://evil.example\")",
+    ),
+]
+
+
+def test_export_csv_neutralises_formula_prefixes():
+    text = export_csv(INJECTION_QUESTIONS).decode("utf-8-sig")
+    rows = list(csv.reader(io.StringIO(text)))
+    question, opt_a, opt_b, opt_c, opt_d, _correct, explanation = rows[1][1:8]
+    assert question.startswith("'=")
+    assert opt_a.startswith("'+")
+    assert opt_b.startswith("'-")
+    assert opt_c.startswith("'@")
+    assert opt_d == "safe option"  # untouched — no leading trigger char
+    assert explanation.startswith("'=")
+
+
+def test_export_xlsx_neutralises_formula_prefixes():
+    wb = load_workbook(io.BytesIO(export_xlsx(INJECTION_QUESTIONS)))
+    ws = wb.active
+    assert ws.cell(row=2, column=2).value.startswith("'=")
+    assert ws.cell(row=2, column=3).value.startswith("'+")
+    assert ws.cell(row=2, column=6).value == "safe option"

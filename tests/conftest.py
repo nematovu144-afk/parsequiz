@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.rate_limit import limiter
 from app.db import base as db_base
 from app.db.base import Base
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """slowapi's counters live in process memory and persist across tests
+    otherwise — an autouse reset keeps /api/upload's 10/minute cap from
+    making test order/count affect results."""
+    limiter.reset()
+    yield
 
 
 @pytest_asyncio.fixture

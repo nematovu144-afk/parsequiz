@@ -9,7 +9,6 @@ actually needs on the patched engine.
 
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -91,3 +90,35 @@ def test_export_unknown_format_returns_400(test_db):
     client = TestClient(app)
     resp = client.post("/api/export", json={"format": "yaml", "questions": []})
     assert resp.status_code == 400
+
+
+def test_upload_is_rate_limited_past_threshold(test_db):
+    """/api/upload is capped at 10/minute per client — the 11th call in the
+    same window should be rejected rather than accepted indefinitely."""
+    client = TestClient(app)
+    for _ in range(10):
+        resp = _upload(client, "quiz.txt", SAMPLE_TXT.encode("utf-8"))
+        assert resp.status_code == 200
+    resp = _upload(client, "quiz.txt", SAMPLE_TXT.encode("utf-8"))
+    assert resp.status_code == 429
+
+
+def test_unexpected_parse_error_does_not_leak_internal_details(test_db, monkeypatch):
+    """An unhandled exception in the pipeline must not hand the client the
+    raw exception text (which can contain internal paths/library internals)."""
+    import app.api.upload as upload_module
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("/etc/secret/internal/path.py leaked traceback detail")
+
+    monkeypatch.setattr(upload_module, "run_pipeline", _boom)
+
+    client = TestClient(app)
+    resp = _upload(client, "quiz.txt", SAMPLE_TXT.encode("utf-8"))
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    body = _poll_until_done(client, job_id)
+    assert body["status"] == "failed"
+    assert "secret" not in body["error"]
+    assert "RuntimeError" not in body["error"]

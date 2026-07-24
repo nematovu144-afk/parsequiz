@@ -100,7 +100,7 @@ async def _call_openai(client: httpx.AsyncClient, user_msg: str) -> str:
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {settings.openai_api_key}"},
         json={
-            "model": settings.llm_model,
+            "model": settings.llm_model or "gpt-4o-mini",
             "temperature": 0.0,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},

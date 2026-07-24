@@ -12,6 +12,19 @@ from openpyxl.utils import get_column_letter
 
 from app.schemas.quiz import Question
 
+# Leading characters that Excel/Google Sheets/LibreOffice interpret as the
+# start of a formula. A cell value beginning with one of these, if opened by
+# a spreadsheet app, can execute arbitrary formulas (CWE-1236) — since these
+# strings originate from uploaded documents, they're untrusted.
+_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_cell(value: str) -> str:
+    """Neutralise formula-injection payloads for spreadsheet exports."""
+    if value and value[0] in _FORMULA_TRIGGER_CHARS:
+        return "'" + value
+    return value
+
 
 def export_json(questions: list[Question]) -> bytes:
     """Clean JSON array (no internal flags)."""
@@ -56,13 +69,13 @@ def export_xlsx(questions: list[Question]) -> bytes:
     # Data rows
     for i, q in enumerate(questions, 2):
         ws.cell(row=i, column=1, value=i - 1)
-        ws.cell(row=i, column=2, value=q.question)
+        ws.cell(row=i, column=2, value=_sanitize_cell(q.question))
         for j, opt in enumerate(q.options):
-            ws.cell(row=i, column=3 + j, value=opt)
+            ws.cell(row=i, column=3 + j, value=_sanitize_cell(opt))
         if q.correct_option_index is not None and q.correct_option_index < len(q.options):
             letter = chr(65 + q.correct_option_index)  # A, B, C, ...
             ws.cell(row=i, column=correct_col, value=letter)
-        ws.cell(row=i, column=explanation_col, value=q.explanation or "")
+        ws.cell(row=i, column=explanation_col, value=_sanitize_cell(q.explanation or ""))
 
     # Column widths
     ws.column_dimensions["B"].width = 50
@@ -92,6 +105,12 @@ def export_csv(questions: list[Question]) -> bytes:
         correct = ""
         if q.correct_option_index is not None and q.correct_option_index < len(q.options):
             correct = chr(65 + q.correct_option_index)
-        writer.writerow([i, q.question, *opts, correct, q.explanation or ""])
+        writer.writerow([
+            i,
+            _sanitize_cell(q.question),
+            *[_sanitize_cell(o) for o in opts],
+            correct,
+            _sanitize_cell(q.explanation or ""),
+        ])
 
     return buf.getvalue().encode("utf-8")

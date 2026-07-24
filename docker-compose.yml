@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: quiz_parser
+    volumes:
+      - quiz_parser_pgdata:/var/lib/postgresql/data
+    ports:
+      # Host-side 5433 avoids clashing with a native Postgres already
+      # listening on 5432; the web service still talks to "db:5432"
+      # over the internal Docker network regardless of this mapping.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/quiz_parser
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+
+volumes:
+  quiz_parser_pgdata:

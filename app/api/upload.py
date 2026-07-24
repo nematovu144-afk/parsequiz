@@ -1,26 +1,36 @@
 """POST /api/upload — accept a file and start async parsing."""
 
-from __future__ import annotations
-
-import asyncio
-import shutil
+import logging
+from contextlib import suppress
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 
 from app.config import settings
 from app.core.exceptions import ParseError
 from app.core.job_store import create_job, fail_job, update_job
+from app.core.rate_limit import limiter
 from app.schemas.quiz import JobStatus, UploadResponse
 from app.services.orchestrator import run_pipeline
 
 router = APIRouter(tags=["upload"])
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".docx", ".pdf", ".txt"}
 
 
 @router.post("/upload", response_model=UploadResponse)
+@limiter.limit("10/minute")
 async def upload_file(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     delimiter_mode: str = Form("auto"),
@@ -77,11 +87,13 @@ async def _parse_task(job_id, file_path: Path, delimiter_mode: str):
         )
     except ParseError as exc:
         await fail_job(job_id, str(exc))
-    except Exception as exc:
-        await fail_job(job_id, f"Unexpected error: {exc}")
+    except Exception:
+        # Full detail goes to the server log only — the exception text can
+        # contain internal paths/library internals we don't want to hand
+        # back to an anonymous client.
+        logger.exception("Unexpected error parsing job %s", job_id)
+        await fail_job(job_id, "Hujjatni tahlil qilishda kutilmagan xatolik yuz berdi.")
     finally:
         # Clean up temp file
-        try:
+        with suppress(OSError):
             file_path.unlink(missing_ok=True)
-        except OSError:
-            pass
