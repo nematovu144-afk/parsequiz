@@ -103,6 +103,36 @@ def test_upload_is_rate_limited_past_threshold(test_db):
     assert resp.status_code == 429
 
 
+def test_reparse_with_different_mode_updates_job(test_db):
+    """Upload with a mode that misses the '+' marker, then reparse with
+    the right mode and get the correct answer without re-uploading."""
+    client = TestClient(app)
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("quiz.txt", SAMPLE_TXT.encode("utf-8"), "text/plain")},
+        data={"delimiter_mode": "hash"},
+    )
+    job_id = resp.json()["job_id"]
+    body = _poll_until_done(client, job_id)
+    assert body["questions"][0]["correct_option_index"] is None
+
+    resp2 = client.post(f"/api/reparse/{job_id}", json={"delimiter_mode": "auto"})
+    assert resp2.status_code == 200
+
+    body2 = _poll_until_done(client, job_id)
+    assert body2["questions"][0]["correct_option_index"] == 1
+    assert body2["questions"][0]["options"][1] == "4"
+
+
+def test_reparse_unknown_job_returns_404(test_db):
+    client = TestClient(app)
+    resp = client.post(
+        "/api/reparse/00000000-0000-0000-0000-000000000000",
+        json={"delimiter_mode": "auto"},
+    )
+    assert resp.status_code == 404
+
+
 def test_unexpected_parse_error_does_not_leak_internal_details(test_db, monkeypatch):
     """An unhandled exception in the pipeline must not hand the client the
     raw exception text (which can contain internal paths/library internals)."""

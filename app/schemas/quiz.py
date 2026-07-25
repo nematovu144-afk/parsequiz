@@ -63,6 +63,10 @@ class UploadResponse(BaseModel):
     status: JobStatus
 
 
+class ReparseRequest(BaseModel):
+    delimiter_mode: str = "auto"
+
+
 class ExportRequest(BaseModel):
     questions: list[Question]
     format: str = "json"  # "json" | "xlsx" | "csv"

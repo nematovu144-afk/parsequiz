@@ -95,6 +95,7 @@ const translations = {
     dropText: ".docx, .pdf yoki .txt faylini shu yerga tashlang",
     browseText: "yoki tanlash uchun bosing",
     detectionLabel: "To'g'ri javobni aniqlash usuli",
+    reparseBtn: "Qayta tahlil qilish",
     mode_auto: "Avtomatik aniqlash",
     mode_bold: "Qalin matn",
     mode_underline: "Tagiga chizilgan matn",
@@ -145,6 +146,7 @@ const translations = {
     dropText: "Перетащите файл .docx, .pdf или .txt сюда",
     browseText: "или нажмите, чтобы выбрать",
     detectionLabel: "Способ определения правильного ответа",
+    reparseBtn: "Заново распознать",
     mode_auto: "Автоопределение",
     mode_bold: "Жирный текст",
     mode_underline: "Подчёркнутый текст",
@@ -195,6 +197,7 @@ const translations = {
     dropText: "Drop a .docx, .pdf, or .txt file here",
     browseText: "or click to browse",
     detectionLabel: "Correct-answer detection",
+    reparseBtn: "Re-analyze",
     mode_auto: "Auto-detect",
     mode_bold: "Bold text",
     mode_underline: "Underlined text",
@@ -389,6 +392,17 @@ function App() {
             filename={filename}
             onReset={() => { setStage('upload'); setQuestions([]); setJobId(null); }}
             onPlay={() => setStage('play')}
+            onReparse={async (mode) => {
+              try {
+                const res = await fetch(`${API}/reparse/${jobId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ delimiter_mode: mode }),
+                });
+                if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
+                setStage('polling');
+              } catch (e) { setError(e.message); }
+            }}
           />
         )}
 
@@ -418,20 +432,19 @@ function App() {
 function UploadZone({ onJobStarted, onError }) {
   const { t } = useT();
   const [dragging, setDragging] = useState(false);
-  const [mode, setMode]         = useState('auto');
   const inputRef = useRef();
 
   const handleFile = useCallback(async (file) => {
     const form = new FormData();
     form.append('file', file);
-    form.append('delimiter_mode', mode);
+    form.append('delimiter_mode', 'auto');
     try {
       const res = await fetch(`${API}/upload`, { method: 'POST', body: form });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
       const data = await res.json();
       onJobStarted(data.job_id, file.name);
     } catch (e) { onError(e.message); }
-  }, [mode, onJobStarted, onError]);
+  }, [onJobStarted, onError]);
 
   const onDrop = (e) => {
     e.preventDefault(); setDragging(false);
@@ -439,39 +452,22 @@ function UploadZone({ onJobStarted, onError }) {
     if (file) handleFile(file);
   };
 
-  const modes = ['auto', 'bold', 'underline', 'plus', 'star', 'hash', 'checkbox'];
-
   return (
-    <div>
-      <div
-        className={`drop-zone rounded-2xl p-14 text-center cursor-pointer ${dragging ? 'active' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current.click()}
-      >
-        <svg className={`mx-auto mb-4 transition-transform duration-200 ${dragging ? 'scale-110 text-green-500' : 'text-gray-400'}`}
-          width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
-        </svg>
-        <p className="text-gray-700 font-semibold">{t('dropText')}</p>
-        <p className="text-gray-400 text-sm mt-1">{t('browseText')}</p>
-        <input ref={inputRef} type="file" accept=".docx,.pdf,.txt" className="hidden"
-          onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
-      </div>
-
-      <div className="mt-5 flex items-center justify-center gap-3 text-sm text-gray-500">
-        <label className="font-medium">{t('detectionLabel')}:</label>
-        <div className="relative">
-          <select value={mode} onChange={(e) => setMode(e.target.value)}
-            className="appearance-none border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 bg-white text-sm text-gray-700 cursor-pointer hover:border-gray-300">
-            {modes.map((m) => <option key={m} value={m}>{t(`mode_${m}`)}</option>)}
-          </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </div>
+    <div
+      className={`drop-zone rounded-2xl p-14 text-center cursor-pointer ${dragging ? 'active' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
+      onClick={() => inputRef.current.click()}
+    >
+      <svg className={`mx-auto mb-4 transition-transform duration-200 ${dragging ? 'scale-110 text-green-500' : 'text-gray-400'}`}
+        width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0L8 8m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
+      </svg>
+      <p className="text-gray-700 font-semibold">{t('dropText')}</p>
+      <p className="text-gray-400 text-sm mt-1">{t('browseText')}</p>
+      <input ref={inputRef} type="file" accept=".docx,.pdf,.txt" className="hidden"
+        onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
     </div>
   );
 }
@@ -512,8 +508,11 @@ function Poller({ jobId, onDone, onError }) {
 
 // ─── Editor ─────────────────────────────────────────────────
 
-function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
+const DETECTION_MODES = ['auto', 'bold', 'underline', 'plus', 'star', 'hash', 'checkbox'];
+
+function Editor({ questions, setQuestions, filename, onReset, onPlay, onReparse }) {
   const { t, tCount } = useT();
+  const [reparseMode, setReparseMode] = useState('auto');
   const flagged  = questions.filter(q => q.flags && q.flags.length > 0).length;
   const total    = questions.length;
 
@@ -543,21 +542,41 @@ function Editor({ questions, setQuestions, filename, onReset, onPlay }) {
   return (
     <div>
       {/* Toolbar */}
-      <div className="sticky top-3 z-10 card bg-white/90 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-bold text-lg text-gray-800">{tCount('questionsCount', total)}</span>
-          {flagged > 0 && (
-            <span className="flag-badge">{tCount('needReview', flagged)}</span>
-          )}
-          <span className="text-gray-400 text-sm truncate max-w-[160px]">{filename}</span>
+      <div className="sticky top-3 z-10 card bg-white/90 backdrop-blur px-4 py-3 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-bold text-lg text-gray-800">{tCount('questionsCount', total)}</span>
+            {flagged > 0 && (
+              <span className="flag-badge">{tCount('needReview', flagged)}</span>
+            )}
+            <span className="text-gray-400 text-sm truncate max-w-[160px]">{filename}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onPlay} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">▶ {t('playBtn')}</button>
+            <button onClick={() => exportAs('json')} className="btn-soft px-3 py-2 rounded-xl text-sm">JSON</button>
+            <button onClick={() => exportAs('xlsx')} className="btn-soft px-3 py-2 rounded-xl text-sm">Excel</button>
+            <button onClick={() => exportAs('csv')}  className="btn-soft px-3 py-2 rounded-xl text-sm">CSV</button>
+            <button onClick={onReset} className="btn-ghost px-3 py-2 rounded-xl text-sm font-semibold">{t('newFileBtn')}</button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={onPlay} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">▶ {t('playBtn')}</button>
-          <button onClick={() => exportAs('json')} className="btn-soft px-3 py-2 rounded-xl text-sm">JSON</button>
-          <button onClick={() => exportAs('xlsx')} className="btn-soft px-3 py-2 rounded-xl text-sm">Excel</button>
-          <button onClick={() => exportAs('csv')}  className="btn-soft px-3 py-2 rounded-xl text-sm">CSV</button>
-          <button onClick={onReset} className="btn-ghost px-3 py-2 rounded-xl text-sm font-semibold">{t('newFileBtn')}</button>
-        </div>
+
+        {onReparse && (
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100 text-sm text-gray-500">
+            <label className="font-medium">{t('detectionLabel')}:</label>
+            <div className="relative">
+              <select value={reparseMode} onChange={(e) => setReparseMode(e.target.value)}
+                className="appearance-none border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 bg-white text-sm text-gray-700 cursor-pointer hover:border-gray-300">
+                {DETECTION_MODES.map((m) => <option key={m} value={m}>{t(`mode_${m}`)}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            <button onClick={() => onReparse(reparseMode)} className="btn-soft px-3 py-1.5 rounded-lg text-sm font-semibold">
+              {t('reparseBtn')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Question cards */}

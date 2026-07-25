@@ -88,6 +88,104 @@ class TestMultipleQuestions:
         assert qs[1].options[0].is_correct is True
 
 
+class TestLineDelimitedFormat:
+    """The '====' (option separator) / '++++' (question separator) /
+    '#' (correct marker) format exported by Hemis and similar systems."""
+
+    def _paras(self, text: str) -> list[RichParagraph]:
+        return [_plain(line.strip()) for line in text.strip("\n").splitlines() if line.strip()]
+
+    def test_basic_two_questions(self):
+        raw = """
+            TCP/IP protokollari steki nechta sathdan iborat?
+            ====
+            #4
+            ====
+            3
+            ====
+            5
+            ====
+            7
+            ++++
+
+            Capital of France?
+            ====
+            London
+            ====
+            #Paris
+            ====
+            Berlin
+            ++++
+        """
+        qs = split_into_questions(self._paras(raw), mode="auto")
+        assert len(qs) == 2
+
+        q1 = qs[0]
+        assert q1.question_text == "TCP/IP protokollari steki nechta sathdan iborat?"
+        assert [o.text for o in q1.options] == ["4", "3", "5", "7"]
+        assert [o.is_correct for o in q1.options] == [True, False, False, False]
+
+        q2 = qs[1]
+        assert [o.text for o in q2.options] == ["London", "Paris", "Berlin"]
+        assert q2.options[1].is_correct is True
+
+    def test_separator_line_does_not_leak_into_question_text(self):
+        raw = """
+            What is 2+2?
+            ====
+            #4
+            ====
+            5
+            ++++
+        """
+        qs = split_into_questions(self._paras(raw), mode="auto")
+        assert qs[0].question_text == "What is 2+2?"
+        assert "====" not in qs[0].question_text
+
+    def test_question_separator_is_not_mistaken_for_plus_marker(self):
+        # A bare "++++" line must never itself become a bogus option --
+        # the naive single-char '+' marker regex would otherwise eat one
+        # '+' and leave a "+++" option behind.
+        raw = """
+            First question?
+            ====
+            #A
+            ====
+            B
+            ++++
+
+            Second question?
+            ====
+            #C
+            ====
+            D
+            ++++
+        """
+        qs = split_into_questions(self._paras(raw), mode="auto")
+        assert len(qs) == 2
+        assert [o.text for o in qs[0].options] == ["A", "B"]
+        assert not any("+" in o.text for o in qs[0].options)
+
+    def test_no_correct_marker_leaves_all_unmarked(self):
+        raw = """
+            Unmarked question?
+            ====
+            Alpha
+            ====
+            Beta
+            ++++
+
+            Another one?
+            ====
+            #X
+            ====
+            Y
+            ++++
+        """
+        qs = split_into_questions(self._paras(raw), mode="auto")
+        assert all(not o.is_correct for o in qs[0].options)
+
+
 class TestQuestionMarkDetection:
     def test_question_ending_with_mark(self):
         paras = [

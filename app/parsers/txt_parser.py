@@ -11,7 +11,7 @@ from app.parsers.base import BaseParser, RichParagraph, RichRun
 class TxtParser(BaseParser):
     async def extract(self, path: Path) -> list[RichParagraph]:
         try:
-            raw = path.read_text(encoding="utf-8", errors="replace")
+            raw = path.read_text(encoding="utf-8-sig", errors="replace")
         except Exception as exc:
             raise CorruptedFileError(f"Cannot read txt: {exc}") from exc
 

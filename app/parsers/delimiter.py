@@ -45,6 +45,19 @@ RE_CORRECT_SYMBOL = re.compile(
     r"^(?P<marker>[+*#]|\[x\]|\[X\])\s*"
 )
 
+# Line-delimited test-bank format (common export from Hemis and similar
+# university LMS systems): options are separated by a line of only "="
+# characters, questions by a line of only "+" characters, and the correct
+# option is prefixed with "#". e.g.:
+#   Question text?
+#   ====
+#   #correct option
+#   ====
+#   wrong option
+#   ++++
+RE_OPTION_SEP = re.compile(r"^={2,}$")
+RE_QUESTION_SEP = re.compile(r"^\+{2,}$")
+
 
 @dataclass
 class ParsedOption:
@@ -78,6 +91,9 @@ def split_into_questions(
       - "hash"      — only the '#' symbol prefix
       - "checkbox"  — only [x] syntax
     """
+    if _looks_line_delimited(paragraphs):
+        return _split_line_delimited(paragraphs, mode)
+
     questions: list[RawQuestion] = []
     current_q: RawQuestion | None = None
 
@@ -125,6 +141,80 @@ def split_into_questions(
     if current_q and (current_q.question_text or current_q.options):
         questions.append(current_q)
 
+    return questions
+
+
+# ── Line-delimited format (Hemis-style "====" / "++++") ────────
+
+
+def _looks_line_delimited(paragraphs: list[RichParagraph]) -> bool:
+    """Detect the '====' / '++++' structural format before falling back
+    to the generic per-line heuristic parser above. A bare line of 2+ "="
+    characters essentially never occurs in genuine question/option prose,
+    so two or more occurrences alone are a reliable signal -- even for a
+    single-question document with no '++++' separator at all."""
+    opt_count = sum(1 for p in paragraphs if RE_OPTION_SEP.match(p.plain_text))
+    return opt_count >= 2
+
+
+def _split_line_delimited(
+    paragraphs: list[RichParagraph],
+    mode: str,
+) -> list[RawQuestion]:
+    """Split a '====' (option separator) / '++++' (question separator)
+    document into RawQuestions. The text before the first '====' in each
+    block is the question; each following segment is one option, marked
+    correct if it starts with a recognised symbol (default: '#')."""
+    questions: list[RawQuestion] = []
+    current_q: RawQuestion | None = None
+    seg_lines: list[str] = []
+    in_options = False
+
+    def flush() -> None:
+        nonlocal seg_lines, current_q
+        text = " ".join(seg_lines).strip()
+        seg_lines = []
+        if not text:
+            return
+        if current_q is None:
+            current_q = RawQuestion()
+        if not in_options:
+            current_q.question_text = (
+                f"{current_q.question_text} {text}".strip()
+                if current_q.question_text else text
+            )
+            return
+        is_correct = False
+        clean = text
+        sym_match = RE_CORRECT_SYMBOL.match(clean)
+        if sym_match:
+            if _marker_matches_mode(sym_match.group("marker"), mode):
+                is_correct = True
+            clean = clean[sym_match.end():].strip()
+        if clean:
+            current_q.options.append(ParsedOption(text=clean, is_correct=is_correct))
+
+    def finalize() -> None:
+        nonlocal current_q, in_options
+        if current_q and (current_q.question_text or current_q.options):
+            questions.append(current_q)
+        current_q = None
+        in_options = False
+
+    for para in paragraphs:
+        text = para.plain_text
+        if RE_QUESTION_SEP.match(text):
+            flush()
+            finalize()
+            continue
+        if RE_OPTION_SEP.match(text):
+            flush()
+            in_options = True
+            continue
+        seg_lines.append(text)
+
+    flush()
+    finalize()
     return questions
 
 
