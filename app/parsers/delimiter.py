@@ -29,9 +29,11 @@ from app.parsers.base import RichParagraph
 
 # ── Regex inventory ──────────────────────────────────────────
 
-# Matches "1.", "2)", "A)", "a.", "A.", etc. at the start of a line
+# Matches "1.", "2)", "A)", "a.", "A.", etc. at the start of a line.
+# Includes S/V alongside A-D: Hemis-style Uzbek quiz banks commonly letter
+# options A) V) S) D) instead of A) B) C) D).
 RE_OPTION_PREFIX = re.compile(
-    r"^(?P<prefix>[A-Da-d1-9][.)]\s*)"  # letter/digit + separator
+    r"^(?P<prefix>[A-DSVa-dsv1-9][.)]\s*)"  # letter/digit + separator
 )
 
 # Question-number prefix: "1.", "12.", "Q1.", "Savol 1:", "#1", etc.
@@ -96,6 +98,14 @@ def split_into_questions(
 
     questions: list[RawQuestion] = []
     current_q: RawQuestion | None = None
+    # Tracks whether current_q was opened by a real question header (numbered
+    # or ending in "?") rather than by stray leading text (e.g. a document
+    # title) — only explicit questions are allowed to be flushed with no
+    # options, so a title line can't surface as a bogus empty "question".
+    current_q_explicit = False
+
+    def _should_flush(q: RawQuestion | None) -> bool:
+        return bool(q) and bool(q.options or (current_q_explicit and q.question_text))
 
     for para in paragraphs:
         plain = para.plain_text
@@ -104,18 +114,20 @@ def split_into_questions(
 
         # ── Is this line a new question header? ──────────────
         if _is_question_line(plain, para):
-            if current_q and (current_q.question_text or current_q.options):
+            if _should_flush(current_q):
                 questions.append(current_q)
             q_text = RE_QUESTION_NUM.sub("", plain).strip()
             current_q = RawQuestion(question_text=q_text)
+            current_q_explicit = True
             continue
 
         # ── Is this an option line? ──────────────────────────
-        opt = _try_parse_option(plain, para, mode)
+        opt = _try_parse_option(plain, para, mode, has_open_question=current_q is not None)
         if opt is not None:
             if current_q is None:
                 # Options appearing before any question — create placeholder
                 current_q = RawQuestion()
+                current_q_explicit = False
             current_q.options.append(opt)
             continue
 
@@ -134,11 +146,14 @@ def split_into_questions(
                 # Continuation of question text
                 current_q.question_text += " " + plain
         else:
-            # Floating text before any question — start a new one
+            # Floating text before any question (e.g. a document title) —
+            # stashed on a placeholder that gets discarded at the next
+            # flush point unless it later gains real options.
             current_q = RawQuestion(question_text=plain)
+            current_q_explicit = False
 
     # Flush last question
-    if current_q and (current_q.question_text or current_q.options):
+    if _should_flush(current_q):
         questions.append(current_q)
 
     return questions
@@ -234,10 +249,15 @@ def _try_parse_option(
     text: str,
     para: RichParagraph,
     mode: str,
+    has_open_question: bool,
 ) -> ParsedOption | None:
     """Try to interpret the line as an answer option.
 
-    Returns None if it doesn't look like an option.
+    Returns None if it doesn't look like an option. ``has_open_question``
+    gates the style-only (bold/underline, no letter prefix) heuristic: a
+    lone bold/underlined line before any question has opened is far more
+    likely to be a document title or heading than a correct answer, so it
+    is never auto-promoted to an option in that state.
     """
     is_correct = False
     clean = text
@@ -256,7 +276,10 @@ def _try_parse_option(
         clean = clean[pfx_match.end():]
     elif not sym_match:
         # No symbol marker and no structural prefix — not an option line
-        # (unless we detect bold/underline marking)
+        # (unless we detect bold/underline marking, and a question is
+        # already open — see has_open_question note above)
+        if not has_open_question:
+            return None
         if mode in ("auto", "bold") and para.has_any_bold():
             return ParsedOption(text=clean.strip(), is_correct=True)
         if mode in ("auto", "underline") and para.has_any_underline():

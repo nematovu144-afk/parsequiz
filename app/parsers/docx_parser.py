@@ -26,22 +26,40 @@ class DocxParser(BaseParser):
 
         paragraphs: list[RichParagraph] = []
         for para in doc.paragraphs:
-            rp = RichParagraph()
-            for run in para.runs:
-                rp.runs.append(
-                    RichRun(
-                        text=run.text,
-                        bold=self._is_bold(run),
-                        underline=run.underline is not None and run.underline is not False,
-                        italic=bool(run.italic),
-                    )
-                )
-            # If paragraph has no runs but has text (rare edge case):
-            if not rp.runs and para.text.strip():
-                rp.runs.append(RichRun(text=para.text))
-            if not rp.is_blank:
-                paragraphs.append(rp)
+            paragraphs.extend(self._para_to_lines(para))
         return paragraphs
+
+    def _para_to_lines(self, para) -> list[RichParagraph]:
+        """Split one docx paragraph into one-or-more RichParagraphs.
+
+        A manual line break (Shift+Enter, python-docx's Run.text renders it
+        as an embedded "\\n") keeps everything inside a single <w:p> element
+        even though it visually looks like separate lines -- e.g. a question
+        header, then several options, glued into one "paragraph" with no
+        real paragraph breaks between them. Splitting on those embedded
+        newlines here lets each visual line reach delimiter.py on its own,
+        the same as if it had been a real paragraph break.
+        """
+        if not para.runs and para.text.strip():
+            return [RichParagraph(runs=[RichRun(text=para.text)])]
+
+        lines: list[RichParagraph] = []
+        current = RichParagraph()
+        for run in para.runs:
+            bold = self._is_bold(run)
+            underline = run.underline is not None and run.underline is not False
+            italic = bool(run.italic)
+            segments = run.text.split("\n")
+            for i, segment in enumerate(segments):
+                if segment:
+                    current.runs.append(
+                        RichRun(text=segment, bold=bold, underline=underline, italic=italic)
+                    )
+                if i < len(segments) - 1:
+                    lines.append(current)
+                    current = RichParagraph()
+        lines.append(current)
+        return [line for line in lines if not line.is_blank]
 
     @staticmethod
     def _is_bold(run) -> bool:

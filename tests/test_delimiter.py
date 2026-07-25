@@ -186,6 +186,46 @@ class TestLineDelimitedFormat:
         assert all(not o.is_correct for o in qs[0].options)
 
 
+class TestUzbekOptionLetters:
+    """Hemis-style Uzbek quiz banks often letter options A) V) S) D)
+    instead of A) B) C) D)."""
+
+    def test_v_and_s_prefixes_recognized_as_options(self):
+        paras = [
+            _plain("1. Shovqinlar qayerlarda ko'p uchraydi?"),
+            _plain("*A) Shaharlarda."),
+            _plain("V) Tog'larda."),
+            _plain("S) Qishloqlarda."),
+            _plain("D) O'rmonlarda."),
+        ]
+        qs = split_into_questions(paras, mode="auto")
+        assert len(qs) == 1
+        assert [o.text for o in qs[0].options] == [
+            "Shaharlarda.",
+            "Tog'larda.",
+            "Qishloqlarda.",
+            "O'rmonlarda.",
+        ]
+        assert qs[0].options[0].is_correct is True
+
+
+class TestLeadingTitleIsNotAQuestion:
+    """A bold/underlined document title before the first real question
+    must not surface as a bogus empty question or a fake 'option'."""
+
+    def test_bold_title_before_first_question_is_discarded(self):
+        paras = [
+            RichParagraph(runs=[RichRun(text="TEST SAVOLLARI", bold=True, underline=True)]),
+            _plain("1. What color is the sky?"),
+            _plain("*A) Blue"),
+            _plain("B) Green"),
+        ]
+        qs = split_into_questions(paras, mode="auto")
+        assert len(qs) == 1
+        assert qs[0].question_text == "What color is the sky?"
+        assert [o.text for o in qs[0].options] == ["Blue", "Green"]
+
+
 class TestQuestionMarkDetection:
     def test_question_ending_with_mark(self):
         paras = [
